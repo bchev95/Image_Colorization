@@ -1,5 +1,7 @@
 import numpy as np
 import cv2
+import argparse
+import os
 
 # Protoxt: https://github.com/richzhang/colorization/blob/caffe/colorization/models/colorization_deploy_v2.prototxt
 # CaffeModel: http://eecs.berkeley.edu/~rich.zhang/projects/2016_colorization/files/demo_v2/colorization_release_v2.caffemodel
@@ -8,10 +10,32 @@ import cv2
 cf_model_path = 'models/colorization_release_v2.caffemodel'
 prototxt_path = 'models/colorization_deploy_v2.prototxt'
 points_path = 'models/pts_in_hull.npy'
-img_path = 'input_imgs/nyc.jpg'
+img_path = 'input_imgs/'
 
-#TO DO: Take in filename from command line, append name to "input_imgs/", then use this as path
 
+#Take in filename from command line, append name to "input_imgs/", then use this as path
+def parse_cmd_args():
+    parser = argparse.ArgumentParser(description = 'B&W image colorization')
+    parser.add_argument('-p', dest = 'img_file', type=str)
+    return parser.parse_args()
+
+#Name output image - remove input file extension from name and append '_colorized.png'
+def name_output(img_file):
+    fname = os.path.splitext(img_file)[0]
+    fname += '_colorized.png'
+    return fname
+
+#####################
+
+def main():
+
+    global img_path
+    #Parse cmd line args, get file name to be colorized
+    args = parse_cmd_args()
+    img_file = args.img_file
+    img_path += img_file
+
+    #Read in the input image
     input_img = cv2.imread(img_path)
 
     #Check that input image file exists and was read correctly, else exit
@@ -39,23 +63,29 @@ img_path = 'input_imgs/nyc.jpg'
     #Model is trained to work with dimensions 224 x 224
     model_width, model_height = 224, 224
 
-#Resize image to model dimensions (224 x 224)
+    #Resize image to model dimensions (224 x 224)
     l_resized = cv2.resize(l_chnl, (model_width, model_height)) 
     #Subtract mean value (this value can be tweaked)
     l_resized -= 50
 
-net_cf.setInput(cv2.dnn.blobFromImage(l_resized))
-ab_chnl = net_cf.forward()[0,:,:,:].transpose((1,2,0)) 
+    net_cf.setInput(cv2.dnn.blobFromImage(l_resized))
+    ab_chnl = net_cf.forward()[0,:,:,:].transpose((1,2,0)) 
 
-#Now resize image back to original size
-(orig_input_height, orig_input_width) = normalized_img.shape[:2] 
-ab_us = cv2.resize(ab_chnl, (orig_input_width, orig_input_height))
-colorized = np.concatenate((l_chnl[:,:,np.newaxis],ab_us), axis = 2)
-#Convert from LAB back to BGR
-colorized = np.clip(cv2.cvtColor(colorized, cv2.COLOR_Lab2BGR), 0, 1)
-#Multiply by 255 to scale back up
-img_result = (colorized*255).astype(np.uint8)
+    #Now resize image back to original size
+    (orig_input_height, orig_input_width) = normalized_img.shape[:2] 
+    ab_us = cv2.resize(ab_chnl, (orig_input_width, orig_input_height))
+    colorized = np.concatenate((l_chnl[:,:,np.newaxis],ab_us), axis = 2)
+    #Convert from LAB back to BGR
+    colorized = np.clip(cv2.cvtColor(colorized, cv2.COLOR_Lab2BGR), 0, 1)
+    #Multiply by 255 to scale back up
+    img_result = (colorized*255).astype(np.uint8)
+    #Name colorized image
+    result_name = name_output(img_file)
+    #Output image to destination file
+    if not cv2.imwrite(result_name, img_result):
+        raise Exception("Error: could not write image")
 
-#Output image to destination file
-if not cv2.imwrite('result.png', img_result):
-    raise Exception("Error: could not write image")
+#########################
+
+if __name__ == "__main__":
+  main()
